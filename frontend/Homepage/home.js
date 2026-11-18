@@ -1,17 +1,92 @@
+// Initialize navigation
+document.addEventListener('DOMContentLoaded', function() {
+  // Set up nav link click handlers
+  document.querySelectorAll('nav a[data-section]').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      const sectionId = this.getAttribute('data-section');
+      if (sectionId) {
+        showSection(sectionId);
+      }
+    });
+  });
+});
+
 document.getElementById("reset").addEventListener("click", () => {
   document.getElementById("memberForm").reset();
 });
 
+if (typeof window.__HOME_API_BASE_URL === "undefined") {
+  window.__HOME_API_BASE_URL =
+    window.API_BASE_URL ||
+    (window.location &&
+    window.location.origin &&
+    window.location.origin !== "null"
+      ? window.location.origin
+      : "http://localhost:5000");
+}
+
+var API_BASE_URL = window.__HOME_API_BASE_URL;
+
+function api(path) {
+  if (!path.startsWith("/")) {
+    path = "/" + path;
+  }
+  return API_BASE_URL + path;
+}
+
 window.addEventListener("load", () => {
-  axios.get("http://localhost:3000/totalhostlers").then((res) => {
+  axios.get(api("/totalhostlers")).then((res) => {
     document.getElementById("count").innerHTML = res.data;
   });
+  
+  // Make dashboard cards clickable after page loads
+  const totalBox = document.getElementById("totalusersbox");
+  const pendingBox = document.getElementById("totalpending");
+  const analysisBox = document.getElementById("analysis");
+  
+  if (totalBox) {
+    totalBox.style.cursor = "pointer";
+    totalBox.addEventListener("click", function() {
+      console.log("Total box clicked");
+      showSection("memberList");
+    });
+  }
+  if (pendingBox) {
+    pendingBox.style.cursor = "pointer";
+    pendingBox.addEventListener("click", function() {
+      console.log("Pending box clicked");
+      showSection("pendingMembers");
+    });
+  }
+});
+
+// Ensure Analysis link/card reliably opens the analysis page
+window.addEventListener("DOMContentLoaded", () => {
+  const analysisHref = "/hostelanalysis/analysispage.html";
+  const link = document.getElementById("analysislink");
+  const card = document.getElementById("analysis");
+  if (link) {
+    link.addEventListener("click", (e) => {
+      // In case anything intercepts default navigation
+      e.preventDefault();
+      window.open(analysisHref, "_blank", "noopener");
+    });
+  }
+  if (card) {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      // If the link itself handled it, skip
+      if (e.target && (e.target.id === "analysislink" || e.target.closest && e.target.closest("#analysislink"))) return;
+      window.open(analysisHref, "_blank", "noopener");
+    });
+  }
 });
 
 window.addEventListener("load", () => {
   axios
     .post(
-      "http://localhost:3000/authenticate",
+      api("/authenticate"),
       {},
       {
         headers: { Authorization: "Bearer " + localStorage.getItem("token") },
@@ -19,16 +94,14 @@ window.addEventListener("load", () => {
     )
     .catch((err) => {
       console.log("auth failed", err);
-      window.location.href =
-        "http://127.0.0.1:5500/frontend/login/userlogin.html";
+      window.location.href = "/login/userlogin.html";
     });
 });
 
 function logout() {
   if (confirm("Are you sure to logout?")) {
     localStorage.removeItem("token");
-    window.location.href =
-      "http://127.0.0.1:5500/frontend/login/userlogin.html";
+    window.location.href = "/login/userlogin.html";
   }
 }
 
@@ -53,7 +126,7 @@ window.addEventListener("load", () => {
   const month = months[d.getMonth()];
   const obj = { pendingmonth: month };
   axios
-    .post("http://localhost:3000/pendingmembers", obj)
+    .post(api("/pendingmembers"), obj)
     .then((res) => {
       const list = res.data || [];
       document.getElementById("totaldue").innerHTML = list.length;
@@ -67,13 +140,21 @@ function showSection(sectionId) {
   document.querySelectorAll(".content-section").forEach((section) => {
     section.classList.add("hidden");
   });
-  document.getElementById(sectionId).classList.remove("hidden");
+  const targetSection = document.getElementById(sectionId);
+  if (targetSection) {
+    targetSection.classList.remove("hidden");
+  }
+  
+  // Update active nav state
+  document.querySelectorAll("nav a").forEach((link) => {
+    link.classList.remove("active");
+  });
+  
   if (sectionId === "memberList") {
     renderMembers();
   }
   else if(sectionId == "vacatedmembersList"){
     vacateMembers();
-
   }
 }
 //adding the member to the database process
@@ -99,7 +180,7 @@ document.getElementById("memberForm").addEventListener("submit", (e) => {
   };
 
   axios
-    .post("http://localhost:3000/onboarduser", obj)
+    .post(api("/onboarduser"), obj)
     .then((res) => {
       const response = res.data;
       console.log(response);
@@ -116,15 +197,15 @@ document.getElementById("memberForm").addEventListener("submit", (e) => {
       }
     })
     .catch((err) => {
-      ocument.getElementById("memberForm").reset();
-      alert("Error occured due to", err.message);
+      document.getElementById("memberForm").reset();
+      alert("Error occurred: " + (err && err.message ? err.message : "Unknown error"));
     });
 });
 
 //displaying memberws list by fetching from database
 
 function renderMembers() {
-  axios.get("http://localhost:3000/memberslist").then((res) => {
+  axios.get(api("/memberslist")).then((res) => {
     const response = res.data;
     const tbody = document.querySelector("#memberTable tbody");
     tbody.innerHTML = "";
@@ -132,8 +213,7 @@ function renderMembers() {
     response.forEach((member) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-          <td>
-          <a href="https://chatgpt.com/c/68fb0dcc-9778-8321-b9b7-bdafb03e1526">${member.Name}</a></td>
+          <td>${member.Name}</td>
           <td>${member.Room}</td>
           <td>${member.Branch}</td>
           <td>${member.College}</td>
@@ -151,7 +231,7 @@ function renderMembers() {
 
 //vacating members list
 function vacateMembers() {
-  axios.get("http://localhost:3000/vacatehistory").then((res) => {
+  axios.get(api("/vacatehistory")).then((res) => {
     const response = res.data;
     const tbody = document.querySelector("#vacatemembersTable tbody");
     tbody.innerHTML = "";
@@ -180,7 +260,7 @@ function deleteMember(id) {
       _id: id,
     };
     axios
-      .post("http://localhost:3000/deleteMember", obj)
+      .post(api("/deleteMember"), obj)
       .then((res) => {
         const response = res.data;
         if (response.data == "success") {
@@ -201,7 +281,7 @@ function editMember(id) {
     _id: id,
   };
 
-  axios.post("http://localhost:3000/editmember", obj).then((res) => {
+  axios.post(api("/editmember"), obj).then((res) => {
     const response = res.data;
     document.getElementById("memberId").value = response._id;
     document.getElementById("name").value = response.Name;
@@ -226,7 +306,7 @@ document.getElementById("search-btn").addEventListener("click", () => {
   const tbody = document.querySelector("#memberTable tbody");
   tbody.innerHTML = "";
 
-  axios.get("http://localhost:3000/memberslist").then((res) => {
+  axios.get(api("/memberslist")).then((res) => {
     const response = res.data;
 
     const filtered = response.filter(
@@ -267,7 +347,7 @@ document.getElementById("payPhone").addEventListener("blur", () => {
     Phonenumber: phone,
   };
 
-  axios.post("http://localhost:3000/namesearch", obj).then((res) => {
+  axios.post(api("/namesearch"), obj).then((res) => {
     const response = res.data;
     document.getElementById("verifyName").innerHTML = response;
     console.log(response);
@@ -298,7 +378,7 @@ document.getElementById("paymentForm").addEventListener("submit", (e) => {
   };
 
   axios
-    .post("http://localhost:3000/addpayment", obj)
+    .post(api("/addpayment"), obj)
     .then((res) => {
       const response = res.data;
       if (response.data == "created") {
@@ -328,7 +408,7 @@ function showMonthPayments() {
   const obj = { fetchmonth: month };
 
   axios
-    .post("http://localhost:3000/fetchpayments", obj)
+    .post(api("/fetchpayments"), obj)
     .then((res) => {
       const response = res.data;
       let total = 0;
@@ -357,7 +437,7 @@ function fetchPaymentHistory() {
   const phone = document.getElementById("searchPhone").value.trim();
   const obj = { historyphone: phone };
   axios
-    .post("http://localhost:3000/paymenthistory", obj)
+    .post(api("/paymenthistory"), obj)
     .then((res) => {
       const data = res.data || [];
       const ul = document.getElementById("paymentHistory");
@@ -384,7 +464,7 @@ function showRoomMembers() {
   const roomno = document.getElementById("roomSelect").value;
   const obj = { roomno: roomno };
   axios
-    .post("http://localhost:3000/roommembers", obj)
+    .post(api("/roommembers"), obj)
     .then((res) => {
       const response = res.data;
       const ul = document.getElementById("roomMemberList");
@@ -410,7 +490,7 @@ function showDayWiseMembers() {
   ul.innerHTML = "";
 
   axios
-    .post("http://localhost:3000/daywisemembers", obj)
+    .post(api("/daywisemembers"), obj)
     .then((res) => {
       const list = res.data || [];
       if (list.length == 0) {
@@ -436,7 +516,7 @@ function showPendingMembers() {
   ul.innerHTML = "";
 
   axios
-    .post("http://localhost:3000/pendingmembers", obj)
+    .post(api("/pendingmembers"), obj)
     .then((res) => {
       const list = res.data || [];
       if (list.length == 0) {

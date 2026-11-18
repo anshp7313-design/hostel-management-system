@@ -3,8 +3,13 @@ html,body{height:100%}
 body{
   margin:0;
   font-family:'Segoe UI',Tahoma,Verdana,sans-serif;
-  background:#f6f8fc;
+  background:linear-gradient(135deg, #f6f8fc 0%, #e9ecef 100%);
   color:#1f2937;
+  animation: fadeIn 0.5s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* top bar */
@@ -20,6 +25,18 @@ body{
   z-index:10;
   font-size:18px;
   font-weight:700;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  animation: slideDown 0.4s ease-out;
+}
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 #vacate-date{
   display:none;
@@ -28,6 +45,10 @@ body{
 #admin-name{
   margin-left: 950px;
   color: #2563eb;
+  transition: color 0.3s ease;
+}
+#admin-name:hover {
+  color: #1d4ed8;
 }
 
 #isdue{
@@ -41,34 +62,98 @@ nav{
   left:0;
   width:220px;
   height:calc(100vh - 52px);
-  background:#0f172a;
+  background:linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
   padding:12px 10px;
   overflow:auto;
+  animation: slideInLeft 0.5s ease-out;
+  box-shadow: 2px 0 15px rgba(0,0,0,0.1);
+}
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 nav a{
   display:block;
-  margin:0;
+  margin:4px 0;
   color:#e5e7eb;
   font-weight:700;
   text-decoration:none;
-  padding:10px 12px;
+  padding:12px 14px;
   border-radius:8px;
-  transition:background .15s,color .15s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size:14px;
+  position: relative;
+  overflow: hidden;
+}
+nav a::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: #60a5fa;
+  transform: scaleY(0);
+  transition: transform 0.3s ease;
+}
+nav a:hover::before,
+nav a.active::before {
+  transform: scaleY(1);
 }
 nav a:hover{
-  background:#1f2a44;
+  background:linear-gradient(90deg, #1f2a44 0%, #2d3748 100%);
   color:#60a5fa;
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(96, 165, 250, 0.2);
+}
+nav a.active{
+  background:linear-gradient(90deg, #1f2a44 0%, #2d3748 100%);
+  color:#60a5fa;
+  box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
 }
 
 .content-section{
   background:#ffffff;
-  border-radius:12px;
-  box-shadow:0 6px 18px rgba(15,23,42,.08);
-  padding:16px;
+  border-radius:16px;
+  box-shadow:0 8px 24px rgba(15,23,42,.1);
+  padding:24px;
   margin:0 20px 18px;
+  animation: fadeInUp 0.5s ease-out;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255,255,255,0.8);
 }
-.hidden{display:none}
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.content-section:hover {
+  box-shadow: 0 12px 32px rgba(15,23,42,.15);
+  transform: translateY(-2px);
+}
+.hidden{
+  display:none;
+  animation: fadeOut 0.3s ease-out;
+}
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 
 
 #myprofile,#paymenthistory,#payment,#roomCount,#hostelanouncements,#monthPayments,#pendingMembers,#dashboard,#payment-history,#wifipassword{
@@ -95,42 +180,128 @@ input:focus,select:focus{
   box-shadow:0 0 0 3px rgba(37,99,235,.12);
 }
 button{
-  background:#2563eb;
+  background:linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color:#fff;
   border:0;
-  padding:0 14px;
+  padding:0 20px;
   font-weight:700;
   cursor:pointer;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-button:hover{filter:brightness(.96)}
+button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+button:hover::before {
+  width: 300px;
+  height: 300px;
+}
+button:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+button:active{
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+#logout {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  width: 100%;
+  margin-top: 10px;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+#logout:hover {
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
 .verify-name{color:#16a34a;font-weight:700}
 
-#totalusersbox,#totalpending,#analysis{
+#totalusersbox,#totalpending{
   width:auto;
-  height:110px;
-  border-radius:14px;
-  padding:14px 16px;
+  height:120px;
+  border-radius:16px;
+  padding:20px 24px;
   color:#fff;
   display:flex;
   flex-direction:column;
   justify-content:center;
   align-items:flex-start;
-  box-shadow:0 10px 18px rgba(15,23,42,.12);
+  box-shadow:0 10px 25px rgba(15,23,42,.15);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  animation: scaleIn 0.6s ease-out;
+}
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+#totalusersbox::before,
+#totalpending::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  animation: shimmer 3s infinite;
+}
+@keyframes shimmer {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+#totalusersbox:hover,
+#totalpending:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow:0 15px 35px rgba(15,23,42,.2);
 }
 #totalusersbox{
-  background:linear-gradient(135deg,#2563eb,#64748b);
+  background:linear-gradient(135deg,#2563eb 0%,#1e40af 50%,#64748b 100%);
   width: 400px;
 }
 #totalpending{
-  background:linear-gradient(135deg,#f97316,#f43f5e);
+  background:linear-gradient(135deg,#f97316 0%,#ea580c 50%,#f43f5e 100%);
   width: 400px;
 }
-#analysis{
-  background:linear-gradient(135deg,#10b981,#059669);
-  width:400px;
+#analysis b,#totalpending b,#totalusersbox b{
+  font-size:13px;
+  opacity: 0.95;
+  letter-spacing: 0.5px;
 }
-#analysis b,#totalpending b,#totalusersbox b{font-size:13px}
-#count,#totaldue{margin:6px 0 0;font-size:24px;font-weight:800}
+#count,#isdue{
+  margin:8px 0 0;
+  font-size:32px;
+  font-weight:900;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  animation: countUp 0.8s ease-out;
+}
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 #analysislink{
   display:inline-block;
   margin-top:8px;

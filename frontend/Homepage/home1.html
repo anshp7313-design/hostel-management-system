@@ -2,31 +2,50 @@
 <html>
 <head>
   <title>Hostel Management System</title>
-  <link rel="stylesheet" href="home.css">
-
+  <link rel="stylesheet" href="/Homepage/home.css">
+  <script src="/shared/api-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="/Homepage/home.js" defer></script>
+  <script>
+    // Check if user is logged in
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login/userlogin.html';
+      }
+    });
+    
+    // Logout function
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('Name');
+      localStorage.removeItem('user');
+      window.location.href = '/login/userlogin.html';
+    }
+  </script>
 </head>
 <body>
   <span id="heading">🏨 Campus Cove Hostels</span>
   <span id="admin-name">Paruchuri Rajesh</span>
   <nav>
-    <a href="#" onclick="showSection('dashboard')" class="nav-item">Dashboard</a>
-    <a href="#" onclick="showSection('addMember')">Add Member</a>
-    <a href="#" onclick="showSection('memberList')">Member List</a>
-    <a href="#" onclick="showSection('payment')">Manage Payment</a>
-    <a href="#" onclick="showSection('roomCount')">Room-wise Members</a>
-    <a href="#" onclick="showSection('dayWise')">Day-wise Members</a>
-    <a href="#" onclick="showSection('monthPayments')">Month-wise Payments</a>
-    <a href="#" onclick="showSection('payment-history')">Payment History</a>
-    <a href="#" onclick="showSection('pendingMembers')">Pending Members</a>
-    <a href="#" onclick="showSection('vacatedmembersList')">Vacate History</a>
-    <a href="http://127.0.0.1:5500/frontend/hostelanalysis/analysispage.html" class="nav-item" target="_blank">Analysis</a><br>
+    <a href="#" data-section="dashboard" class="nav-item">Dashboard</a>
+    <a href="#" data-section="addMember">Add Member</a>
+    <a href="#" data-section="memberList">Member List</a>
+    <a href="#" data-section="payment">Manage Payment</a>
+    <a href="#" data-section="roomCount">Room-wise Members</a>
+    <a href="#" data-section="dayWise">Day-wise Members</a>
+    <a href="#" data-section="monthPayments">Month-wise Payments</a>
+    <a href="#" data-section="payment-history">Payment History</a>
+    <a href="#" data-section="pendingMembers">Pending Members</a>
+    <a href="#" data-section="vacatedmembersList">Vacate History</a>
+    <a href="/hostelanalysis/analysispage.html" class="nav-item" target="_blank">Analysis</a><br>
      <button type="button" id="logout" onclick="logout()">Logout</button>
   </nav>
 
 
 
   <!-- Add Member Section -->
-  <div id="addMember" class="content-section">
+  <div id="addMember" class="content-section hidden">
     <h3>Add / Update Member</h3>
     <form id="memberForm" autocomplete="off">
       <input type="hidden" id="memberId">
@@ -42,7 +61,7 @@
     <br>
   </div>
 
-  <div id="dashboard" class="content-section hidden">
+  <div id="dashboard" class="content-section">
   <div id="totalusersbox">
     <b>Total Hostlers</b>
     <p id="count"></p>
@@ -53,7 +72,7 @@
   </div><br>
   <div id="analysis">
     <b id="analysisicon">Analysis</b>
-    <a href="http://127.0.0.1:5500/frontend/hostelanalysis/analysispage.html" id="analysislink">click here</a>
+    <a href="/hostelanalysis/analysispage.html" id="analysislink" target="_blank" rel="noopener">click here</a>
   </div>
 </div>
 
@@ -276,7 +295,6 @@
     </select>
     <ul id="pendingMemberList"></ul>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="home.js"></script>
+
   </body>
 </html>

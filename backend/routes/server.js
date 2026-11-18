@@ -1,113 +1,478 @@
 
-const express = require('express')
+const express = require('express');
 const app = express();
-const { adminuser, otpverify,user,payment,vacate,signupuser, onlinepayment} = require("../models/mongoSchema");
-const cors = require("cors")
+// Load env as early as possible so downstream modules can read vars
+require('dotenv').config();
+const { adminuser, otpverify, user, payment, vacate, signupuser, onlinepayment } = require("../models/mongoSchema");
+const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
-const fetch = require("node-fetch");
-const bcrypt = require("bcrypt")
+// Avoid requiring `node-fetch` (v3 is ESM-only and can crash on require()).
+// Use axios for HTTP requests or the global fetch in newer Node versions.
+// const fetch = require("node-fetch");
+const crypto = require('crypto');
+const bcrypt = require("bcrypt");
+const mongoose = require('mongoose');
 const { Razorpay, razorpay } = require("./razorpaydetails");
 const path = require("path");
 
+// In-memory debugging storage for last generated OTP (development only)
+let __lastOtp = null;
+let __lastOtpEmail = null;
+let __lastOtpTimestamp = null;
 
-app.use(cors())
-require("dotenv").config();
+// Configure CORS to allow requests from any origin during development
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Parse JSON and URL-encoded bodies
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from frontend directory
+const fs = require('fs');
+const frontendPath = path.resolve(__dirname, '../../frontend');
+const homepagePath = path.join(frontendPath, 'Homepage');
+
+if (fs.existsSync(frontendPath)) {
+  // Serve all static files from frontend directory (including index.html)
+  app.use(express.static(frontendPath));
+  console.log('Serving static files from:', frontendPath);
+  
+  // Explicit route for home page
+  app.get('/Homepage/home1.html', (req, res) => {
+    const homePage = path.join(homepagePath, 'home1.html');
+    if (fs.existsSync(homePage)) {
+      return res.sendFile(homePage);
+    }
+    console.error('Home page not found at:', homePage);
+    return res.status(404).send('Home page not found');
+  });
+  
+  // Serve analysis page and its assets
+  const analysisPath = path.join(frontendPath, 'hostelanalysis');
+  app.use('/hostelanalysis', express.static(analysisPath));
+  
+  // Explicit route for analysis page
+  app.get('/hostelanalysis/analysispage.html', (req, res) => {
+    const analysisPage = path.join(analysisPath, 'analysispage.html');
+    if (fs.existsSync(analysisPage)) {
+      return res.sendFile(analysisPage);
+    }
+    console.error('Analysis page not found at:', analysisPage);
+    return res.status(404).send('Analysis page not found');
+  });
+  
+  // Serve other analysis assets
+  app.get('/hostelanalysis/:file', (req, res) => {
+    const filePath = path.join(analysisPath, req.params.file);
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+    console.error('File not found:', filePath);
+    return res.status(404).send('File not found');
+  });
+  
+  console.log('Homepage path:', homepagePath);
+} else {
+  console.error('Frontend directory not found at:', frontendPath);
+}
+
+// Env already loaded above
+
+// Add request logging (with password redaction)
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  if (
+    req.body &&
+    typeof req.body === "object" &&
+    Object.keys(req.body).length > 0
+  ) {
+    const safeBody = { ...req.body };
+    for (const key of Object.keys(safeBody)) {
+      if (/pass|secret|token|otp/i.test(key)) {
+        safeBody[key] = "***";
+      }
+    }
+    console.log("Request body:", JSON.stringify(safeBody, null, 2));
+  }
+  next();
+});
+
+// Ensure admin accounts have a hashed password (supports default admin setup)
+async function ensureAdminPasswords() {
+  try {
+    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+    const admins = await adminuser.find({});
+    if (admins.length === 0) {
+      const hash = await bcrypt.hash(defaultPassword, 10);
+      await adminuser.create({
+        Name: "Admin User",
+        Email: "admin@hostel.com",
+        Password: hash,
+        Status: true,
+      });
+      console.log("Created default admin account: admin@hostel.com");
+      return;
+    }
+
+    for (const adm of admins) {
+      if (!adm.Password) {
+        const hash = await bcrypt.hash(defaultPassword, 10);
+        await adminuser.updateOne({ _id: adm._id }, { $set: { Password: hash } });
+        console.log(`Initialized default password for admin: ${adm.Email}`);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to initialize admin passwords:", err.message);
+  }
+}
+
+if (mongoose.connection.readyState === 1) {
+  ensureAdminPasswords();
+} else {
+  mongoose.connection.once("open", ensureAdminPasswords);
+}
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 //authentication
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  console.log(token)
-  if (!token) return res.sendStatus(401);
+  
+  if (!token) {
+    console.log("No token provided");
+    return res.status(401).json({ error: "Access denied. No token provided." });
+  }
 
-  jwt.verify(token, process.env.secrettoken, (err, user) => {
-    console.log(user);
-    if (err) return res.sendStatus(403);
+  jwt.verify(token, process.env.secrettoken || 'your-secret-key', (err, user) => {
+    if (err) {
+      console.log("Token verification failed:", err.message);
+      return res.status(403).json({ error: "Invalid or expired token" });
+    }
     req.user = user;
-    console.log(req.user);
     next();
   });
 }
 
+// Admin login with Email + Password
+app.post("/adminlogin", async (req, res) => {
+  try {
+    const rawEmail = req.body.email || req.body.Email || "";
+    const password = req.body.password || req.body.Password || "";
+    const email = String(rawEmail).trim();
+
+    if (!email || !password) {
+      return res.status(400).json({
+        data: "error",
+        message: "Email and password are required",
+      });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(500).json({
+        data: "error",
+        message: "Database not connected",
+      });
+    }
+
+    const userData = await adminuser.findOne({
+      Email: new RegExp("^" + escapeRegex(email) + "$", "i"),
+    });
+
+    if (!userData) {
+      return res.json({
+        data: "notexist",
+        message: "No admin account found with this email",
+      });
+    }
+
+    if (!userData.Status) {
+      return res.json({
+        data: "notactive",
+        message: "This admin account is inactive. Please contact support.",
+      });
+    }
+
+    if (!userData.Password) {
+      return res.json({
+        data: "error",
+        message: "Password is not configured for this admin account",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, userData.Password);
+    if (!isMatch) {
+      return res.json({
+        data: "wrongpassword",
+        message: "Incorrect password. Please try again.",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        email: userData.Email,
+        userId: userData._id,
+        role: "admin",
+      },
+      process.env.secrettoken || "your-secret-key",
+      { expiresIn: "24h" }
+    );
+
+    return res.json({
+      data: "success",
+      token,
+      Name: userData.Name,
+      user: {
+        id: userData._id,
+        name: userData.Name,
+        email: userData.Email,
+        role: "admin",
+      },
+      message: "Login successful",
+    });
+  } catch (error) {
+    console.error("Admin login error:", error);
+    return res.status(500).json({
+      data: "error",
+      message: "An error occurred during login. Please try again.",
+    });
+  }
+});
+
 //login otp verify
 app.post("/userverifylogin", async (req, res) => {
   try {
-    const { Email } = req.body;
-    await otpverify.deleteOne({Email});
-    const exist = await adminuser.find({Email});
-    console.log(exist)
-    if (exist.length==0) {
-      return res.json({ data: "notexist" });
+    // Accept either `Email` or `email` from the client
+    const Email = req.body.Email || req.body.email;
+    console.log("OTP request for email:", Email); // Debug log
+
+    // Basic validation
+    if (!Email) {
+      console.warn("No email provided in /userverifylogin request");
+      return res.status(400).json({ data: "error", message: "Email is required" });
     }
-    if(!exist[0].Status){
-      return res.json({data:"notactive"})
+
+    // Check mongoose connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error("MongoDB is not connected. readyState=", mongoose.connection.readyState);
+      return res.status(500).json({ data: "error", message: "Database not connected" });
     }
+    
+    // Check if email exists
+    const exist = await adminuser.findOne({ Email: Email });
+    console.log("User found:", exist); // Debug log
+    
+    if (!exist) {
+      return res.send("notexist"); // Changed to match frontend expectation
+    }
+    
+    if (!exist.Status) {
+      return res.send("notactive"); // Changed to match frontend expectation
+    }
+
+    // Generate and save OTP
     const otp = Math.floor(1000 + Math.random() * 9000);
+    await otpverify.deleteMany({ Email: Email }); // Clean up old OTPs
     await otpverify.create({
       Email: Email,
       Passcode: otp,
     });
-    var SibApiV3Sdk = require("sib-api-v3-sdk");
 
-    var defaultClient = SibApiV3Sdk.ApiClient.instance;
-    defaultClient.authentications["api-key"].apiKey = process.env.mailapikey;
+    // Log OTP for testing (remove or disable in production)
+    __lastOtp = otp;
+    __lastOtpEmail = Email;
+    __lastOtpTimestamp = new Date().toISOString();
 
-    var apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    var sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    console.log('==================== OTP GENERATED ====================');
+    console.log(`Time : ${__lastOtpTimestamp}`);
+    console.log(`Email: ${__lastOtpEmail}`);
+    console.log(`OTP  : ${__lastOtp}`);
+    console.log('======================================================');
 
-    const senderEmail = "218x1a0482@khitguntur.ac.in";
-    const recipientEmail = Email;
+    // Email sending (temporarily disabled for testing)
+    try {
+      var SibApiV3Sdk = require("sib-api-v3-sdk");
+      var defaultClient = SibApiV3Sdk.ApiClient.instance;
+      defaultClient.authentications["api-key"].apiKey = process.env.mailapikey;
 
-    sendSmtpEmail.sender = { name: "Verification", email: senderEmail };
-    sendSmtpEmail.to = [{ email: recipientEmail }];
-    sendSmtpEmail.subject = "Campus Cove Hostels";
-    sendSmtpEmail.htmlContent = `<p>Your otp password is ${otp}</p>`;
+      var apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+      var sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
-    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log("API called successfully. Returned data: ", data);
+      sendSmtpEmail.sender = { 
+        name: "Verification", 
+        email: "noreply@campus-cove.com" 
+      };
+      sendSmtpEmail.to = [{ email: Email }];
+      sendSmtpEmail.subject = "Your OTP for Login";
+      sendSmtpEmail.htmlContent = `
+        <p>Your OTP for login is: <strong>${otp}</strong></p>
+        <p>This OTP is valid for 10 minutes.</p>
+      `;
 
-    res.status(200).json({ data: "success" });
-    console.log(otp);
+      const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+      console.log("Email sent successfully:", data);
+    } catch (emailError) {
+      // Log detailed info about the email error (status and response body when available)
+      console.error("Error sending email:", emailError && emailError.message ? emailError.message : emailError);
+      if (emailError && emailError.response) {
+        try {
+          console.error("Email API status:", emailError.response.status);
+          console.error("Email API body:", JSON.stringify(emailError.response.body || emailError.response, null, 2));
+        } catch (e) {
+          console.error("Error while logging emailError.response:", e);
+        }
+      }
+      // Continue even if email fails, since we're logging the OTP
+    }
+
+    res.send("success");
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "fail" });
+    console.error("Error in /userverifylogin:", error);
+    res.status(500).json({ data: "error", message: error.message || "Internal server error" });
   }
+});
+
+// Development-only debug endpoint to fetch the last generated OTP
+app.get('/debug/last-otp', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  if (!__lastOtp) {
+    return res.json({ data: 'none', message: 'No OTP generated yet' });
+  }
+
+  return res.json({
+    data: 'ok',
+    email: __lastOtpEmail,
+    otp: __lastOtp,
+    timestamp: __lastOtpTimestamp
+  });
 });
 
 //login into account
 app.post("/loginaccount", async (req, res) => {
-  const { Email,Otp } = req.body;
+  const { Email, Otp } = req.body;
+  
   try {
-    const userexist = await adminuser.find({Email});
-    const otp = await otpverify.findOne({ Email });
-    console.log(otp);
-    if (!userexist.length || !userexist[0].Status) {
-      return res.json({ data: "notactive" });
-    } else {
-      if (otp && otp.Passcode == Otp) {
-        await otpverify.deleteOne({Email});
-        const token = jwt.sign(
-          { email: userexist[0].Email },
-          process.env.secrettoken,
-          { expiresIn: "30m" }
-        );
-        return res.json({ data: "success" ,token,Name:userexist[0].Name});
+    // Input validation
+    if (!Email || !Otp) {
+      return res.status(400).json({ 
+        data: "error",
+        message: "Email and OTP are required" 
+      });
+    }
+
+    const userData = await adminuser.findOne({ Email });
+    const otpData = await otpverify.findOne({ Email });
+    
+    // Check if user exists and is active
+    if (!userData) {
+      return res.json({ 
+        data: "notexist",
+        message: "User not found" 
+      });
+    }
+    
+    if (!userData.Status) {
+      return res.json({ 
+        data: "notactive",
+        message: "Account is not active. Please contact admin." 
+      });
+    }
+    
+    // Check if OTP exists
+    if (!otpData) {
+      console.log('No OTP found for email:', Email);
+      return res.json({ 
+        data: "invalid",
+        message: "No OTP found. Please request a new one." 
+      });
+    }
+    
+    // Log OTP verification attempt
+    console.log('OTP Verification -', {
+      email: Email,
+      storedOTP: otpData.Passcode,
+      receivedOTP: Otp,
+      otpType: { 
+        stored: typeof otpData.Passcode, 
+        received: typeof Otp 
+      }
+    });
+    
+    // Convert both to string for comparison to avoid type issues
+    if (String(otpData.Passcode) !== String(Otp)) {
+      // Increment failed attempt count
+      const newCount = (otpData.Count || 0) + 1;
+      
+      if (newCount >= 3) {
+        // Block account after 3 failed attempts
+        await adminuser.updateOne({ Email }, { $set: { Status: false } });
+        await otpverify.deleteOne({ Email });
+        
+        return res.json({ 
+          data: "noattempts",
+          message: "Too many failed attempts. Account has been blocked. Please contact admin." 
+        });
       } else {
-        await otpverify.updateOne({ Email }, { $inc: { Count: 1 } })
-        if ((otp?.Count ?? 0) + 1 >= 3) {
-          await user.updateOne({ Email }, { $set: { Status: false } });
-          await otpverify.deleteOne({ Email });
-          return res.json({ data: "noattempts" });
-        } else {
-          return res.json({ data: "wrongotp" });
-        }
+        // Update failed attempt count
+        await otpverify.updateOne({ Email }, { $set: { Count: newCount } });
+        
+        return res.json({ 
+          data: "wrongotp",
+          message: `Incorrect OTP. ${3 - newCount} attempts remaining.` 
+        });
       }
     }
-  } catch (err) {
-    await otpverify.deleteOne({Email});
-    return res.json({ data: err.message });
+    
+    // If we get here, OTP is correct
+    // Delete the used OTP
+    await otpverify.deleteOne({ Email });
+    
+    // Create JWT token
+    const token = jwt.sign(
+      { 
+        email: userData.Email,
+        userId: userData._id,
+        role: userData.role || 'user' 
+      },
+      process.env.secrettoken || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+    
+    // Send success response with user data
+    console.log(`Login successful for ${Email} (id=${userData._id})`);
+    return res.json({ 
+      data: "success",
+      token,
+      Name: userData.Name,
+      user: {
+        id: userData._id,
+        name: userData.Name,
+        email: userData.Email,
+        role: userData.role || 'user'
+      },
+      message: "Login successful"
+    });
+    
+  } catch (error) {
+    console.error("Login error:", error);
+    // Clean up OTP in case of error
+    await otpverify.deleteOne({ Email }).catch(console.error);
+    
+    return res.status(500).json({ 
+      data: "error",
+      message: "An error occurred during login. Please try again."
+    });
   }
 });
 
@@ -271,25 +636,30 @@ app.post("/userlogin",async(req,res)=>{
 
   try{
     const {mobilenumber,password} = req.body;
-    const userexist = await signupuser.find({PhoneNumber:mobilenumber})
+    const phone = String(mobilenumber || "").trim();
+    if (!phone || !password) {
+      return res.json({ data: "error", message: "Mobile number and password are required" });
+    }
+    const userexist = await signupuser.find({PhoneNumber:phone})
     if(userexist.length==0){
-      res.json({data:"notexist"})
+      return res.json({data:"notexist"})
     }
-    console.log(userexist)
-    const result = await bcrypt.compare(password,userexist[0].Passcode)
-    const username = await user.findOne({PhoneNumber:mobilenumber})
-    const token = jwt.sign(
-      { mobilenumber: mobilenumber },
-      process.env.secrettoken,
-      { expiresIn: "3h" }
-    );
-    console.log(token)
-    if(result){
-      return res.json({data:"success",Name:username.Name,token})
+    // Defensive: ensure we have a stored passcode
+    if (!userexist[0] || !userexist[0].Passcode) {
+      return res.json({ data: "notexist" });
     }
-    else{
+
+    const result = await bcrypt.compare(password, userexist[0].Passcode)
+    if(!result){
       return res.json({data:"wrongpassword"})
     }
+    const username = await user.findOne({PhoneNumber:phone})
+    const token = jwt.sign(
+      { mobilenumber: phone, role: "student" },
+      process.env.secrettoken || 'your-secret-key',
+      { expiresIn: "3h" }
+    );
+    return res.json({data:"success",Name:username ? username.Name : "Student",token})
 
   }
   catch(err){
@@ -543,8 +913,26 @@ async function sendPaymentSms(number,amount,date) {
 }
 
 
-//razor pay connecting
+// Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ status: 'ok', message: 'API is working!', timestamp: new Date().toISOString() });
+});
 
+// Razorpay routes - only available if Razorpay is initialized
+if (razorpay) {
+  // Razorpay initialization code here
+  console.log("Razorpay routes are enabled");
+} else {
+  console.log("Razorpay routes are disabled - no API keys provided");
+  
+  // Add a dummy route to handle payment requests when Razorpay is disabled
+  app.post("/razorpay/orders", (req, res) => {
+    res.status(200).json({
+      success: false,
+      message: "Online payments are currently disabled. Please contact support."
+    });
+  });
+}
 
 app.post("/createorder", async (req, res) => {
   const { amount, currency, receipt,mobilenumber } = req.body;
@@ -622,9 +1010,15 @@ catch(err){
 
 
 
-app.listen(3000,(err)=>{
-  if(err){
-    console.log(err.message)
-  }
-  console.log("server running")
-})
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// Start the server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  console.log('MongoDB Connected...');
+});

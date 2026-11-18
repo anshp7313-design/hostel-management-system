@@ -1,21 +1,24 @@
 const mongoose = require("mongoose")
 
-mongoose.connect("mongodb://localhost:27017/HostelManagement")
-.then((result)=>{
-    console.log("connect successfully")
+// Use environment variable when provided; fall back to local Mongo
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/HostelManagement";
+
+mongoose.connect(MONGO_URI)
+.then(()=>{
+  console.log("MongoDB connected")
 })
 .catch((err)=>{
-    console.log(err.message)
+  console.log("MongoDB connection error:", err.message)
 })
 
 const adminuserSchema = new mongoose.Schema({
   Name: { type: String, required: true },
   Email: { type: String, required: true },
+  Password: { type: String, required: false },
   Status: {
     type: Boolean,
     default: true
-}
-
+  }
 })
 
 const otpSchema = new mongoose.Schema({

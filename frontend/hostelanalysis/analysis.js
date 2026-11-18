@@ -18,11 +18,97 @@ var monthNames = [
 var allMembers = [];
 var allPayments = [];
 var currentYear = new Date().getFullYear();
+var HOME_PAGE_RELATIVE = "../Homepage/home1.html";
+var HOME_PAGE_ABSOLUTE = "/frontend/Homepage/home1.html";
 
-// back
-document.getElementById("backBtn").addEventListener("click", function () {
-  window.location.href = "http://127.0.0.1:5500/frontend/Homepage/home1.html";
-});
+/**
+ * Build the best possible URL for the dashboard regardless of how
+ * the analysis page was opened (file://, http(s)://, new tab etc).
+ */
+function buildDashboardUrl() {
+    // 1. If we arrived from the dashboard, reuse that exact URL.
+    if (document.referrer) {
+        try {
+            var ref = new URL(document.referrer);
+            if (
+                (!window.location.origin || ref.origin === window.location.origin) &&
+                ref.pathname.toLowerCase().includes("/homepage/")
+            ) {
+                return ref.href;
+            }
+        } catch (err) {
+            console.warn("Could not parse referrer:", err);
+        }
+    }
+
+    // 2. Derive the path by swapping /hostelanalysis/... with /Homepage/home1.html
+    try {
+        var current = new URL(window.location.href);
+        var lowerPath = current.pathname.toLowerCase();
+        var marker = "/hostelanalysis/";
+        if (lowerPath.includes(marker)) {
+            current.pathname =
+                current.pathname.substring(0, lowerPath.indexOf(marker)) +
+                "/Homepage/home1.html";
+            return current.href;
+        }
+    } catch (err) {
+        console.warn("Could not derive dashboard path from location:", err);
+    }
+
+    // 3. Fall back to origin + absolute path (works for http servers)
+    if (window.location.origin && window.location.origin !== "null") {
+        return window.location.origin + HOME_PAGE_ABSOLUTE;
+    }
+
+    // 4. Last resort: relative path resolution (covers file:// usage)
+    try {
+        return new URL(HOME_PAGE_RELATIVE, window.location.href).href;
+    } catch (err) {
+        console.warn("Could not resolve relative dashboard URL:", err);
+    }
+
+    return HOME_PAGE_ABSOLUTE;
+}
+
+/**
+ * Wire up the Back button so it always returns to the dashboard.
+ */
+function setupBackButton() {
+    var backBtn = document.getElementById("backBtn");
+    if (!backBtn) {
+        console.error("Back button not found!");
+        return;
+    }
+
+    backBtn.style.position = "relative";
+    backBtn.style.zIndex = "1000";
+    backBtn.style.cursor = "pointer";
+
+    backBtn.onclick = function (event) {
+        event.preventDefault();
+        var dashboardUrl = buildDashboardUrl();
+        console.log("Back button ->", dashboardUrl);
+        window.location.href = dashboardUrl;
+    };
+
+    console.log("Back button setup complete");
+}
+
+// Run when the page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupBackButton);
+} else {
+    // DOMContentLoaded has already fired
+    setupBackButton();
+}
+
+// API base URL provided by shared config (fallback to current origin)
+const API_BASE_URL =
+  window.API_BASE_URL ||
+  (window.location && window.location.origin && window.location.origin !== "null"
+    ? window.location.origin
+    : "http://localhost:5000");
 
 function asArray(x) {
   if (Array.isArray(x)) return x;
@@ -46,16 +132,17 @@ window.onload = function () {
   var token = localStorage.getItem("token") || "";
 
   axios
-    .get("http://localhost:3000/memberslist", {
-      headers: token ? { Authorization: "Bearer " + token } : {},
+    .get(`${API_BASE_URL}/memberslist`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     .then(function (res) {
       allMembers = asArray(res.data);
       debugDump("members", allMembers);
 
-      return axios.get("http://localhost:3000/paymentslist", {
-        headers: token ? { Authorization: "Bearer " + token } : {},
-      });
+      return axios
+        .get(`${API_BASE_URL}/paymentslist`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
     })
     .then(function (res) {
       allPayments = asArray(res.data);

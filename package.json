@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node backend/routes/server.js",
+    "start:8080": "set PORT=8080 && node backend/routes/server.js",
+    "seed": "node backend/seed.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

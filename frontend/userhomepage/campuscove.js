@@ -1,155 +1,250 @@
+const API_BASE_URL =
+  window.API_BASE_URL ||
+  (window.location && window.location.origin && window.location.origin !== "null"
+    ? window.location.origin
+    : "http://localhost:5000");
 
-window.addEventListener("load", () => {
-  axios.get("http://localhost:3000/mystaydays", {
-      headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-    })
-    .then((res) => {
-      console.log(res);
-      document.getElementById("count").innerHTML = res.data;
-    });
-});
+function api(path) {
+  return path.startsWith("http")
+    ? path
+    : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
 
-//logout function
+function authHeaders() {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-function logout() {
-  if (confirm("Are you sure to logout?")) {
-    localStorage.removeItem("token");
-    window.location.href =
-      "http://127.0.0.1:5500/frontend/userslogin/campuscovehostels.html";
+function redirectToLogin() {
+  window.location.href = "/userslogin/campuscovehostels.html";
+}
+
+function ensureLoggedIn() {
+  if (!localStorage.getItem("token")) {
+    redirectToLogin();
+    return false;
+  }
+  return true;
+}
+
+function setWelcomeName() {
+  const adminName = localStorage.getItem("name") || "Guest";
+  const el = document.getElementById("admin-name");
+  if (el) {
+    el.textContent = `Welcome ${adminName}`;
   }
 }
 
-//displaying pending payment for this month
-window.addEventListener("load", () => {
-  axios
-    .get("http://localhost:3000/mypaymentstatus", {
-      headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-    })
-    .then((res) => {
-      document.getElementById("isdue").innerText = res.data;
-    })
-    .catch(() => {
-      document.getElementById("isdue").innerText = "Not Paid";
-    });
-});
-
-//displaying user profile
-
-function loadProfile() {
-  axios
-    .get("http://localhost:3000/myprofile", {
-      headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-    })
-    .then((res) => {
-      var user = res.data;
-      document.getElementById("name").innerText = `Name : ${user.Name}`
-      document.getElementById("roomnumber").innerText = `Room Number : ${user.Room}`
-      document.getElementById("branch").innerText = `Branch : ${user.Branch}`
-      document.getElementById("college").innerText = `College :${user.College}`
-      document.getElementById("joindate").innerText = `Join Date : ${user.JoinDate.slice(0,10)}`
-      document.getElementById("mobilenumber").innerText = `Mobile Number: ${user.PhoneNumber}`
-    });
+async function loadStayDays() {
+  try {
+    const res = await axios.get(api("/mystaydays"), { headers: authHeaders() });
+    document.getElementById("count").innerText = res.data || 0;
+  } catch (err) {
+    console.error("Failed to load stay days:", err);
+    document.getElementById("count").innerText = "-";
+    handleAuthError(err);
+  }
 }
 
-//showing payment history
+async function loadPaymentStatus() {
+  try {
+    const res = await axios.get(api("/mypaymentstatus"), {
+      headers: authHeaders(),
+    });
+    document.getElementById("isdue").innerText = res.data || "Paid";
+  } catch (err) {
+    console.error("Failed to load payment status:", err);
+    document.getElementById("isdue").innerText = "Not Paid";
+    handleAuthError(err);
+  }
+}
 
-function loadPaymentHistory() {
-  axios
-    .get("http://localhost:3000/mypayments", {
-      headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-    })
-    .then((res) => {
-      var list = res.data || [];
-      var tbody = document.querySelector("#paymenthistoryTable tbody");
-      tbody.innerHTML = "";
-      list.forEach((p) => {
-        var tr = document.createElement("tr");
-        tr.innerHTML = `
-        <td>${p.Amount}</td>
-        <td>${p.TransactionId}</td>
-        <td>${p.Mode}</td>
-        <td>${(p.Date.slice(0,10))}</td>
-        <td>${p.Month}</td>
+async function loadProfile() {
+  try {
+    const res = await axios.get(api("/myprofile"), { headers: authHeaders() });
+    const user = res.data || {};
+    document.getElementById("name").innerText = `Name : ${user.Name || "-"}`;
+    document.getElementById("roomnumber").innerText = `Room Number : ${
+      user.Room || "-"
+    }`;
+    document.getElementById("branch").innerText = `Branch : ${
+      user.Branch || "-"
+    }`;
+    document.getElementById("college").innerText = `College : ${
+      user.College || "-"
+    }`;
+    document.getElementById("joindate").innerText = `Join Date : ${
+      user.JoinDate ? user.JoinDate.slice(0, 10) : "-"
+    }`;
+    document.getElementById("mobilenumber").innerText = `Mobile Number: ${
+      user.PhoneNumber || "-"
+    }`;
+  } catch (err) {
+    console.error("Failed to load profile:", err);
+    handleAuthError(err);
+  }
+}
+
+async function loadPaymentHistory() {
+  try {
+    const res = await axios.get(api("/mypayments"), { headers: authHeaders() });
+    const list = Array.isArray(res.data) ? res.data : [];
+    const tbody = document.querySelector("#paymenthistoryTable tbody");
+    tbody.innerHTML = "";
+    list.forEach((p) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${p.Amount ?? "-"}</td>
+        <td>${p.TransactionId ?? "-"}</td>
+        <td>${p.Mode ?? "-"}</td>
+        <td>${p.Date ? p.Date.slice(0, 10) : "-"}</td>
+        <td>${p.Month ?? "-"}</td>
       `;
-        tbody.appendChild(tr);
-      });
-    })
-    .catch(() => {
-      document.querySelector("#paymenthistoryTable tbody").innerHTML =
-        "<tr><td colspan='5'>No Records</td></tr>";
+      tbody.appendChild(tr);
     });
+    if (list.length === 0) {
+      tbody.innerHTML = "<tr><td colspan='5'>No Records</td></tr>";
+    }
+  } catch (err) {
+    console.error("Failed to load payment history:", err);
+    const tbody = document.querySelector("#paymenthistoryTable tbody");
+    tbody.innerHTML = "<tr><td colspan='5'>Unable to load data</td></tr>";
+    handleAuthError(err);
+  }
 }
 
+async function lookupMemberName(phone) {
+  if (!phone) {
+    document.getElementById("verifyName").innerText = "";
+    return;
+  }
+  try {
+    const res = await axios.post(api("/namesearch"), { Phonenumber: phone });
+    document.getElementById("verifyName").innerText = res.data || "";
+  } catch (err) {
+    console.error("Name lookup failed:", err);
+    document.getElementById("verifyName").innerText = "Lookup failed";
+  }
+}
 
-function showSection(sectionId) {
-  document.querySelectorAll(".content-section").forEach((section) => {
-    section.classList.add("hidden");
+async function loadRoomMembers() {
+  try {
+    const res = await axios.get(api("/roommates"), { headers: authHeaders() });
+    const data = res.data || {};
+    document.getElementById(
+      "roomCountResult"
+    ).innerText = `Room No: ${data.room || "-"}`;
+    const ul = document.getElementById("roomMemberList");
+    ul.innerHTML = "";
+    (data.members || []).forEach((m) => {
+      const li = document.createElement("li");
+      li.innerText = `${m.Name} (${m.PhoneNumber})`;
+      ul.appendChild(li);
+    });
+  } catch (err) {
+    console.error("Failed to load room members:", err);
+    handleAuthError(err);
+  }
+}
+
+function handleAuthError(err) {
+  if (err?.response?.status === 401) {
+    (Toast && Toast.warn) ? Toast.warn("Session expired. Please login again.") : alert("Session expired. Please login again.");
+    localStorage.removeItem("token");
+    redirectToLogin();
+  }
+}
+
+function setupDownloadButton() {
+  const btn = document.getElementById("download");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      window.location.href = api("/download");
+    });
+  }
+}
+
+function setupPhoneLookup() {
+  const input = document.getElementById("payPhone");
+  if (!input) return;
+  input.addEventListener("blur", () => lookupMemberName(input.value.trim()));
+  input.addEventListener("input", () => {
+    if (!input.value) {
+      document.getElementById("verifyName").innerText = "";
+    }
   });
-  document.getElementById(sectionId).classList.remove("hidden");
-  if (sectionId === "myprofile") {
-    loadProfile();
-  }
-  else if(sectionId == "payment"){
-    loadPaymentHistory()
-
-  }
-  else if(sectionId=="roomCount"){
-    loadRoomMembers();
-  }
 }
 
-//payment gateway
+function setupPaymentGateway() {
+  const btn = document.getElementById("paymentsubmit-btn");
+  if (!btn) return;
 
-document
-  .getElementById("paymentsubmit-btn")
-  .addEventListener("click", async function (e) {
+  btn.addEventListener("click", async (e) => {
     e.preventDefault();
-    const payPhoneValue = document.getElementById("payPhone").value;
-    console.log(payPhoneValue)
 
-    let amount = parseInt(document.getElementById("amount").value) * 100;
-    let receipt = "receipt_" + Math.floor(Math.random() * 100000);
+    const phone = document.getElementById("payPhone").value.trim();
+    const amountField = document.getElementById("amount");
+    const month = document.getElementById("month").value;
+
+    if (!phone || phone.length < 10) {
+      (Toast && Toast.warn) ? Toast.warn("Please enter a valid mobile number.") : alert("Please enter a valid mobile number.");
+      return;
+    }
+
+    if (!month) {
+      (Toast && Toast.warn) ? Toast.warn("Please select a month.") : alert("Please select a month.");
+      return;
+    }
+
+    const amountValue = parseInt(amountField.value, 10);
+    if (Number.isNaN(amountValue) || amountValue <= 0) {
+      alert("Invalid amount");
+      return;
+    }
+
+    const payload = {
+      amount: amountValue * 100, // Razorpay expects paise
+      currency: "INR",
+      receipt: `receipt_${Date.now()}`,
+      mobilenumber: phone,
+    };
+
     try {
-      const orderRes = await axios.post(
-        "http://localhost:3000/createorder",
-        {
-          amount,
-          currency: "INR",
-          receipt,
-          mobilenumber:payPhoneValue
-        }
-      );
-
+      const orderRes = await axios.post(api("/createorder"), payload);
       const orderData = orderRes.data;
+
+      if (!orderData || !orderData.id) {
+        (Toast && Toast.error) ? Toast.error("Failed to create payment order. Please try again later.") : alert("Failed to create payment order. Please try again later.");
+        return;
+      }
 
       const options = {
         key: "rzp_test_RCbunur8vK5qev",
         amount: orderData.amount,
         currency: orderData.currency,
         name: "Hostel Fee",
-        description: "Purchase",
+        description: `Payment for ${month}`,
         order_id: orderData.id,
         handler: async function (response) {
           try {
             const verifyRes = await axios.post(
-              "http://localhost:3000/verify-payment",
-              response,
-              {
-                headers: {
-                  Authorization: "Bearer " + localStorage.getItem("token"),
-                },
-              }
+              api("/verify-payment"),
+              response
             );
-            if (verifyRes.data.success) {
-              alert("Payment Successful!");
-              window.location.href =
-                "http://127.0.0.1:5500/expensetrackerhome.html";
+            if (verifyRes.data && verifyRes.data.success) {
+              (Toast && Toast.success) ? Toast.success("Payment Successful!") : alert("Payment Successful!");
+              loadPaymentStatus();
+              loadPaymentHistory();
             } else {
-              alert("Payment verification failed!");
+              (Toast && Toast.error) ? Toast.error("Payment verification failed!") : alert("Payment verification failed!");
             }
           } catch (err) {
-            alert("Payment verification error");
+            console.error("Verification failed:", err);
+            (Toast && Toast.error) ? Toast.error("Payment verification error") : alert("Payment verification error");
           }
+        },
+        prefill: {
+          contact: phone,
         },
         theme: { color: "#3399cc" },
       };
@@ -157,59 +252,57 @@ document
       const rzp = new Razorpay(options);
       rzp.open();
     } catch (err) {
-      alert("Error creating order");
-      console.error(err);
+      console.error("Error creating order:", err);
+      (Toast && Toast.error) ? Toast.error("Error creating payment order") : alert("Error creating payment order");
     }
   });
+}
 
-
-  document.getElementById("payPhone").addEventListener("blur", () => {
-    const phone = document.getElementById("payPhone").value.trim();
-    console.log(phone);
-
-    const obj = {
-      Phonenumber: phone,
-    };
-
-    axios.post("http://localhost:3000/namesearch", obj).then((res) => {
-      const response = res.data;
-      document.getElementById("verifyName").innerHTML = response;
-      console.log(response);
-    });
+function showSection(sectionId) {
+  document.querySelectorAll(".content-section").forEach((section) => {
+    section.classList.add("hidden");
   });
-
-
-   document.getElementById("download").addEventListener("click", () => {
-     window.location.href = "http://localhost:3000/download";
-   });
-  //room member details
-
-  function loadRoomMembers() {
-    axios
-      .get("http://localhost:3000/roommates", {
-        headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-      })
-      .then((res) => {
-        const data = res.data;
-        document.getElementById("roomCountResult").innerText =
-          "Room No: " + data.room;
-        const ul = document.getElementById("roomMemberList");
-        ul.innerHTML = "";
-        data.members.forEach((m) => {
-          const li = document.createElement("li");
-          li.innerText = m.Name + " (" + m.PhoneNumber + ")";
-          ul.appendChild(li);
-        });
-      });
+  const target = document.getElementById(sectionId);
+  if (target) {
+    target.classList.remove("hidden");
   }
 
+  switch (sectionId) {
+    case "dashboard":
+      loadStayDays();
+      loadPaymentStatus();
+      break;
+    case "myprofile":
+      loadProfile();
+      break;
+    case "paymenthistory":
+      loadPaymentHistory();
+      break;
+    case "roomCount":
+      loadRoomMembers();
+      break;
+    default:
+      break;
+  }
+}
 
-  document.getElementById("download").addEventListener('click',()=>{
-    window.location.href = "http://localhost:3000/download";
+window.showSection = showSection;
 
-  })
+function init() {
+  if (!ensureLoggedIn()) return;
+  setWelcomeName();
+  setupDownloadButton();
+  setupPhoneLookup();
+  setupPaymentGateway();
+  showSection("dashboard");
+}
 
+window.logout = function () {
+  if (confirm("Are you sure you want to logout?")) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("name");
+    redirectToLogin();
+  }
+};
 
-//displaying admin-name
-let adminName = localStorage.getItem("name")
-document.getElementById("admin-name").innerHTML = ` Welcome ${adminName}`
+document.addEventListener("DOMContentLoaded", init);

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — Campus Cove Hostels</title>
+  <link rel="stylesheet" href="/shared/login.css" />
+  <script src="/shared/api-config.js"></script>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="brand-panel" aria-label="Campus Cove Hostels">
+      <div class="brand-header">
+        <span class="brand-badge">🏨 Hostel Portal</span>
+        <h1>Campus Cove Hostels</h1>
+        <p class="brand-tagline">Where comfort meets excellence — one portal for students and hostel administrators.</p>
+      </div>
+
+      <ul class="brand-highlights">
+        <li>
+          <span class="highlight-dot" aria-hidden="true">🛏️</span>
+          <span>View room allocation, roommates, and stay duration at a glance.</span>
+        </li>
+        <li>
+          <span class="highlight-dot" aria-hidden="true">💳</span>
+          <span>Track monthly rent status, receipts, and payment history.</span>
+        </li>
+        <li>
+          <span class="highlight-dot" aria-hidden="true">📊</span>
+          <span>Admins can onboard residents, manage dues, and inspect hostel analytics.</span>
+        </li>
+      </ul>
+
+      <div class="brand-footer">
+        Need help? Email <a href="mailto:help@campuscovehostels.com" style="color: #fff; text-decoration: underline;">help@campuscovehostels.com</a>
+      </div>
+    </section>
+
+    <section class="form-panel">
+      <div class="role-tabs" role="tablist" aria-label="Login Role">
+        <button type="button" id="tab-student" class="role-tab active" role="tab" aria-selected="true" aria-controls="student-login-form">
+          Student
+        </button>
+        <button type="button" id="tab-admin" class="role-tab" role="tab" aria-selected="false" aria-controls="admin-login-form">
+          Admin
+        </button>
+      </div>
+
+      <div class="panel-heading">
+        <h2 id="panel-title">Student Sign In</h2>
+        <p id="panel-subtitle">Access your room details, stay summary, and payment history.</p>
+      </div>
+
+      <div id="status-banner" class="status-banner" role="alert" aria-live="polite"></div>
+
+      <!-- Student Sign In Form -->
+      <form id="student-login-form" class="auth-form" novalidate>
+        <div class="field">
+          <label for="student-phone">Mobile Number</label>
+          <input
+            type="tel"
+            id="student-phone"
+            placeholder="Enter your registered mobile number"
+            autocomplete="tel"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="student-password">Password</label>
+          <div class="input-wrap">
+            <input
+              type="password"
+              id="student-password"
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="button" class="toggle-password" data-target="student-password" aria-label="Show password">
+              Show
+            </button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="student-remember" />
+            <span>Remember mobile number</span>
+          </label>
+          <span class="help-hint">Forgot password? Ask warden</span>
+        </div>
+
+        <button type="submit" id="student-login-btn" class="btn-primary">Sign In</button>
+
+        <p class="switch-mode">
+          New resident?
+          <button type="button" id="open-signup-btn" class="link-btn">Create Student Account</button>
+        </p>
+      </form>
+
+      <!-- Student Create Account Form -->
+      <form id="student-signup-form" class="auth-form hidden" novalidate>
+        <div class="field">
+          <label for="signup-phone">Registered Mobile Number</label>
+          <input
+            type="tel"
+            id="signup-phone"
+            placeholder="Mobile number added by hostel admin"
+            autocomplete="tel"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <div class="input-wrap">
+            <input
+              type="password"
+              id="signup-password"
+              placeholder="Create a password (min 6 characters)"
+              autocomplete="new-password"
+              required
+            />
+            <button type="button" class="toggle-password" data-target="signup-password" aria-label="Show password">
+              Show
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="signup-confirm">Confirm Password</label>
+          <div class="input-wrap">
+            <input
+              type="password"
+              id="signup-confirm"
+              placeholder="Re-enter your password"
+              autocomplete="new-password"
+              required
+            />
+            <button type="button" class="toggle-password" data-target="signup-confirm" aria-label="Show password">
+              Show
+            </button>
+          </div>
+          <span id="signup-mismatch" class="field-error"></span>
+        </div>
+
+        <button type="submit" id="student-signup-btn" class="btn-primary">Create Account</button>
+
+        <p class="switch-mode">
+          Already have an account?
+          <button type="button" id="back-to-signin-btn" class="link-btn">Back to Sign In</button>
+        </p>
+      </form>
+
+      <!-- Admin Sign In Form -->
+      <form id="admin-login-form" class="auth-form hidden" novalidate>
+        <div class="field">
+          <label for="admin-email">Admin Email</label>
+          <input
+            type="email"
+            id="admin-email"
+            placeholder="admin@hostel.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="admin-password">Password</label>
+          <div class="input-wrap">
+            <input
+              type="password"
+              id="admin-password"
+              placeholder="Enter admin password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="button" class="toggle-password" data-target="admin-password" aria-label="Show password">
+              Show
+            </button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="admin-remember" />
+            <span>Remember email</span>
+          </label>
+        </div>
+
+        <button type="submit" id="admin-login-btn" class="btn-primary">Sign In as Admin</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    Campus Cove Hostels &middot; Hostel Management System
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+  <script src="/shared/login.js"></script>
+</body>
+</html>
